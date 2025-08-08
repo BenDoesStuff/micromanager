@@ -22,6 +22,11 @@ def dms_coordinates(value: float):
     return ((deg, 1), (minutes, 1), (seconds, 1000000))
 
 
+def slugify(text: str) -> str:
+    """Convert text to lowercase slug with hyphens."""
+    return re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-").lower()
+
+
 class GeoTaggerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -148,10 +153,12 @@ class GeoTaggerApp:
             location = random.choice(locations)
             keyword = random.choice(keywords)
             base, ext = os.path.splitext(img_name)
-            safe_keyword = re.sub(r"[^A-Za-z0-9_-]", "_", keyword) or "image"
-            count = name_counts.get(safe_keyword, 0) + 1
-            name_counts[safe_keyword] = count
-            new_name = f"{safe_keyword}{'_' + str(count) if count > 1 else ''}{ext}"
+            safe_keyword = slugify(keyword) or "image"
+            safe_location = slugify(location) or "location"
+            base_slug = f"{safe_keyword}-in-{safe_location}"
+            count = name_counts.get(base_slug, 0) + 1
+            name_counts[base_slug] = count
+            new_name = f"{base_slug}{'-' + str(count) if count > 1 else ''}{ext}"
             try:
                 # Rate limiting
                 wait = delay - (time.time() - last_request)
@@ -161,7 +168,7 @@ class GeoTaggerApp:
                 last_request = time.time()
 
                 out_path = os.path.join(out_folder, new_name)
-                self.write_metadata(img_path, lat, lon, keyword, out_path)
+                self.write_metadata(img_path, lat, lon, base_slug, out_path)
                 self.log(f"Processed {img_name} -> {location} ({lat}, {lon}) as {new_name}")
             except Exception as e:
                 self.log(f"Error processing {img_name}: {e}")
@@ -188,11 +195,11 @@ class GeoTaggerApp:
             raise ValueError(f"Location not found: {location}")
         return float(data[0]["lat"]), float(data[0]["lon"])
 
-    def write_metadata(self, img_path: str, lat: float, lon: float, keyword: str, out_path: str) -> None:
+    def write_metadata(self, img_path: str, lat: float, lon: float, title: str, out_path: str) -> None:
         img = Image.open(img_path)
         if img.format == "PNG":
             info = PngImagePlugin.PngInfo()
-            info.add_text("Title", keyword)
+            info.add_text("Title", title)
             info.add_text("Latitude", str(lat))
             info.add_text("Longitude", str(lon))
             img.save(out_path, pnginfo=info)
@@ -209,7 +216,7 @@ class GeoTaggerApp:
         exif_dict["GPS"][piexif.GPSIFD.GPSLongitudeRef] = b"E" if lon >= 0 else b"W"
         exif_dict["GPS"][piexif.GPSIFD.GPSLongitude] = dms_coordinates(lon)
         exif_dict.setdefault("0th", {})
-        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = keyword
+        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = title
         exif_bytes = piexif.dump(exif_dict)
         img.save(out_path, exif=exif_bytes)
 
