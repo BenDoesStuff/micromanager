@@ -1,2 +1,6 @@
 PyQt5>=5.15
 openai>=1.0
+
+Pillow
+piexif
+requests
