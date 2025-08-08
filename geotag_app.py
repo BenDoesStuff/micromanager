@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import threading
 import time
 import tkinter as tk
@@ -138,6 +139,7 @@ class GeoTaggerApp:
 
         delay = 1.0 / rps
         last_request = 0.0
+        name_counts = {}
 
         for idx, img_name in enumerate(images, 1):
             if self.cancel_event.is_set():
@@ -145,6 +147,11 @@ class GeoTaggerApp:
             img_path = os.path.join(folder, img_name)
             location = random.choice(locations)
             keyword = random.choice(keywords)
+            base, ext = os.path.splitext(img_name)
+            safe_keyword = re.sub(r"[^A-Za-z0-9_-]", "_", keyword) or "image"
+            count = name_counts.get(safe_keyword, 0) + 1
+            name_counts[safe_keyword] = count
+            new_name = f"{safe_keyword}{'_' + str(count) if count > 1 else ''}{ext}"
             try:
                 # Rate limiting
                 wait = delay - (time.time() - last_request)
@@ -153,8 +160,9 @@ class GeoTaggerApp:
                 lat, lon = self.geocode(location)
                 last_request = time.time()
 
-                self.write_metadata(img_path, lat, lon, keyword, os.path.join(out_folder, img_name))
-                self.log(f"Processed {img_name} -> {location} ({lat}, {lon})")
+                out_path = os.path.join(out_folder, new_name)
+                self.write_metadata(img_path, lat, lon, keyword, out_path)
+                self.log(f"Processed {img_name} -> {location} ({lat}, {lon}) as {new_name}")
             except Exception as e:
                 self.log(f"Error processing {img_name}: {e}")
             finally:
